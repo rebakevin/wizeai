@@ -1,2 +1,17 @@
 # IDE
 .idea
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Env
+.env
+.env.*.local
+
+# Misc
+*.log
+.DS_Store
