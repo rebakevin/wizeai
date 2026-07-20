@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: wizeai
+      POSTGRES_PASSWORD: wizeai
+      POSTGRES_DB: wizeai
+    ports:
+      - "5432:5432"
+    volumes:
+      - wizeai-postgres-data:/var/lib/postgresql/data
+
+volumes:
+  wizeai-postgres-data:
