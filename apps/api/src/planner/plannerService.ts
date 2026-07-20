@@ -19,7 +19,7 @@ function buildPrompt(input: PlannerGenerateInput): string {
 export async function generate(input: PlannerGenerateInput): Promise<TaskBreakdown> {
   const events = runner.runEphemeral({
     userId: "planner-service",
-    newMessage: { parts: [{ text: buildPrompt(input) }] },
+    newMessage: { role: "user", parts: [{ text: buildPrompt(input) }] },
   });
 
   let finalText = "";

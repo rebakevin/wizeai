@@ -10,6 +10,7 @@ import { CalendarConnectSchema } from "./calendar/routes";
 import { WhatsappConnectSchema } from "./whatsapp/routes";
 import { PlannerGenerateRequestSchema } from "./planner/routes";
 import { ScheduleRequestSchema } from "./scheduler/routes";
+import { ChatRequestSchema } from "./assistant/routes";
 
 extendZodWithOpenApi(z);
 
@@ -220,6 +221,26 @@ registry.registerPath({
     200: {
       description: "The resulting schedule.",
       content: { "application/json": { schema: ScheduleResultSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/agent/chat",
+  summary: "Talk to the Wize AI assistant",
+  description:
+    "General-purpose conversational endpoint backed by a Google ADK agent with tools for " +
+    "breaking down an assignment into tasks, (re)scheduling them, and cancelling the current " +
+    "plan. Conversation state persists in-memory per userId for the life of the server process.",
+  tags: ["Assistant"],
+  request: {
+    body: { content: { "application/json": { schema: ChatRequestSchema } } },
+  },
+  responses: {
+    200: {
+      description: "The assistant's reply.",
+      content: { "application/json": { schema: z.object({ reply: z.string() }) } },
     },
   },
 });
