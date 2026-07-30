@@ -1,41 +1,28 @@
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check } from "lucide-react";
-import { z } from "zod";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { BackLink } from "@/components/BackLink";
-import { api } from "@/lib/apiClient";
+import { authClient } from "@/lib/authClient";
 import { connectionStatusKey, useConnectionStatus } from "@/lib/connections";
 
-const ConnectCalendarSchema = z.object({
-  accessToken: z.string().min(1, "Required"),
-});
-
-type ConnectCalendarInput = z.infer<typeof ConnectCalendarSchema>;
+const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 
 export function ConnectCalendar() {
   const queryClient = useQueryClient();
   const status = useConnectionStatus("calendar");
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<ConnectCalendarInput>({ resolver: zodResolver(ConnectCalendarSchema) });
-
   const connectMutation = useMutation({
-    mutationFn: api.connectCalendar,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: connectionStatusKey("calendar") });
-    },
+    mutationFn: () =>
+      authClient.linkSocial({
+        provider: "google",
+        scopes: [GOOGLE_CALENDAR_SCOPE],
+        callbackURL: `${window.location.origin}/connect/calendar`,
+      }),
   });
 
   const disconnectMutation = useMutation({
-    mutationFn: api.disconnectCalendar,
+    mutationFn: () => authClient.unlinkAccount({ providerId: "google" }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: connectionStatusKey("calendar") });
     },
@@ -80,29 +67,16 @@ export function ConnectCalendar() {
         <CardHeader>
           <CardTitle>Connect Google Calendar</CardTitle>
           <CardDescription>
-            Google sign-in isn&apos;t wired up yet — paste a token to simulate a connection while
-            the real OAuth flow is built.
+            Wize AI will schedule your study sessions here once an assignment is broken down.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <form
-            className="flex flex-col gap-4"
-            onSubmit={handleSubmit((input) => connectMutation.mutate(input))}
-          >
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="accessToken">Access token</Label>
-              <Input id="accessToken" type="password" {...register("accessToken")} />
-              {errors.accessToken && (
-                <p className="text-sm text-destructive">{errors.accessToken.message}</p>
-              )}
-            </div>
-            {connectMutation.isError && (
-              <p className="text-sm text-destructive">Could not connect to Google Calendar.</p>
-            )}
-            <Button type="submit" disabled={connectMutation.isPending}>
-              {connectMutation.isPending ? "Connecting..." : "Connect"}
-            </Button>
-          </form>
+        <CardContent className="flex flex-col gap-4">
+          {connectMutation.isError && (
+            <p className="text-sm text-destructive">Could not start the Google connection.</p>
+          )}
+          <Button disabled={connectMutation.isPending} onClick={() => connectMutation.mutate()}>
+            {connectMutation.isPending ? "Redirecting..." : "Connect with Google Calendar"}
+          </Button>
         </CardContent>
       </Card>
     </div>
