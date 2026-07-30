@@ -6,7 +6,6 @@ import {
 import { z } from "zod";
 import { ScheduleResultSchema, TaskBreakdownSchema } from "@wizeai/shared";
 import { CanvasConnectSchema } from "./canvas/routes";
-import { CalendarConnectSchema } from "./calendar/routes";
 import { WhatsappConnectSchema } from "./whatsapp/routes";
 import { PlannerGenerateRequestSchema } from "./planner/routes";
 import { ScheduleRequestSchema } from "./scheduler/routes";
@@ -90,37 +89,26 @@ registry.registerPath({
 });
 
 registry.registerPath({
-  method: "post",
-  path: "/api/calendar/connect",
-  summary: "Connect Google Calendar (mocked)",
+  method: "get",
+  path: "/api/calendar/status",
+  summary: "Check whether Google Calendar is connected for the current session user",
+  description:
+    "Connecting/disconnecting happens client-side via Better Auth's linkSocial/unlinkAccount " +
+    "(Google account linking with the calendar.events scope) — this route just reports status.",
   tags: ["Calendar"],
-  request: { body: { content: { "application/json": { schema: CalendarConnectSchema } } } },
-  responses: {
-    201: {
-      description: "Connected.",
-      content: { "application/json": { schema: ConnectedResponseSchema } },
-    },
-  },
-});
-
-registry.registerPath({
-  method: "post",
-  path: "/api/calendar/disconnect",
-  summary: "Disconnect Google Calendar",
-  tags: ["Calendar"],
-  request: { body: { content: { "application/json": { schema: UserIdBodySchema } } } },
   responses: {
     200: {
-      description: "Disconnected.",
+      description: "Connection status.",
       content: { "application/json": { schema: ConnectedResponseSchema } },
     },
+    401: { description: "Not authenticated." },
   },
 });
 
 registry.registerPath({
   method: "post",
   path: "/api/calendar/sync",
-  summary: "Sync Google Calendar events (mocked)",
+  summary: "Sync Google Calendar events",
   tags: ["Calendar"],
   request: {
     body: {
@@ -281,8 +269,8 @@ export const openApiDocument = new OpenApiGeneratorV3(registry.definitions).gene
     title: "Wize AI API",
     version: "0.0.0",
     description:
-      "Canvas, Google Calendar, and WhatsApp integrations are mocked stubs. " +
-      "The Planner endpoint calls a real Google ADK agent. " +
+      "Canvas, Google Calendar, and WhatsApp are real integrations; the Planner and Assistant " +
+      "endpoints call real Google ADK agents. " +
       "Auth is handled by Better Auth — see /api/auth/reference for those routes.",
   },
   servers: [{ url: "/" }],
