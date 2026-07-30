@@ -1,6 +1,6 @@
 import { addMinutes, subtractBusyBlocks } from "@wizeai/shared/utils";
 import type { ScheduleCreateInput, ScheduleResult } from "@wizeai/shared/types";
-import { calendarClient } from "../calendar/mockCalendarClient";
+import { calendarClient } from "../calendar/realCalendarClient";
 
 /**
  * Greedily places tasks into the earliest available free slots within
@@ -34,8 +34,8 @@ export async function createSchedule(
     const start = slot.start;
     const end = addMinutes(start, task.estimatedMinutes);
 
-    await calendarClient.createEvent(userId, { title: task.title, start, end });
-    scheduled.push({ taskId: task.id, start, end });
+    const createdEvent = await calendarClient.createEvent(userId, { title: task.title, start, end });
+    scheduled.push({ taskId: task.id, googleEventId: createdEvent.googleEventId, start, end });
 
     if (end.getTime() === slot.end.getTime()) {
       freeSlots.splice(slotIndex, 1);
