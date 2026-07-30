@@ -48,6 +48,7 @@ export async function generate(input: PlannerGenerateInput): Promise<TaskBreakdo
 
 export async function generateAndPersist(
   assignmentId: string,
+  userId: string,
   input: PlannerGenerateInput,
 ): Promise<TaskBreakdown> {
   const breakdown = await generate(input);
@@ -55,8 +56,10 @@ export async function generateAndPersist(
   await db.insert(tasks).values(
     breakdown.tasks.map((task) => ({
       id: randomUUID(),
+      userId,
       assignmentId,
       title: task.title,
+      description: task.description,
       estimatedMinutes: task.estimatedMinutes,
     })),
   );

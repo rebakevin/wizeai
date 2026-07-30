@@ -1,7 +1,13 @@
 import { z } from "zod";
 
 export const AssignmentStatusSchema = z.enum(["pending", "in_progress", "completed"]);
-export const TaskStatusSchema = z.enum(["pending", "scheduled", "completed"]);
+export const TaskStatusSchema = z.enum([
+  "pending",
+  "scheduled",
+  "completed",
+  "skipped",
+  "cancelled",
+]);
 
 export const UserSchema = z.object({
   id: z.string(),
@@ -38,9 +44,12 @@ export const AssignmentSchema = z.object({
 
 export const TaskSchema = z.object({
   id: z.string(),
-  assignmentId: z.string(),
+  userId: z.string(),
+  assignmentId: z.string().nullable(),
   title: z.string(),
+  description: z.string().nullable(),
   estimatedMinutes: z.number().int().positive(),
+  googleEventId: z.string().nullable(),
   scheduledStart: z.coerce.date().nullable(),
   scheduledEnd: z.coerce.date().nullable(),
   status: TaskStatusSchema,

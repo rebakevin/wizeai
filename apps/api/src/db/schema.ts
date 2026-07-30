@@ -54,14 +54,20 @@ export const assignments = pgTable("assignments", {
 
 export const tasks = pgTable("tasks", {
   id: text("id").primaryKey(),
-  assignmentId: text("assignment_id")
+  userId: text("user_id")
     .notNull()
-    .references(() => assignments.id, { onDelete: "cascade" }),
+    .references(() => users.id, { onDelete: "cascade" }),
+  // Nullable: most tasks today come from a chat-driven breakdown with no persisted `assignments`
+  // row behind it (Canvas assignments are never synced into that table — see CLAUDE.md). Kept for
+  // the one existing caller (`generateAndPersist`, `POST /planner/generate`) that does have one.
+  assignmentId: text("assignment_id").references(() => assignments.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
+  description: text("description"),
   estimatedMinutes: integer("estimated_minutes").notNull(),
+  googleEventId: text("google_event_id"),
   scheduledStart: timestamp("scheduled_start", { withTimezone: true }),
   scheduledEnd: timestamp("scheduled_end", { withTimezone: true }),
-  status: text("status", { enum: ["pending", "scheduled", "completed"] })
+  status: text("status", { enum: ["pending", "scheduled", "completed", "skipped", "cancelled"] })
     .notNull()
     .default("pending"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

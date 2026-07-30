@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { FunctionTool } from "@google/adk";
+import { and, eq, ilike } from "drizzle-orm";
 import { z } from "zod";
 import type { ScheduleResult } from "@wizeai/shared/types";
+import { db } from "../db/client";
+import { tasks as tasksTable } from "../db/schema";
 import { calendarClient } from "../calendar/realCalendarClient";
 import { canvasClient } from "../canvas/realCanvasClient";
 import { generate as generatePlan } from "../planner/plannerService";
@@ -10,6 +13,7 @@ import { createSchedule } from "../scheduler/schedulerService";
 interface SessionTask {
   id: string;
   title: string;
+  description: string;
   estimatedMinutes: number;
 }
 
@@ -49,6 +53,7 @@ export const breakdownAssignmentTool = new FunctionTool({
     const tasks: SessionTask[] = breakdown.tasks.map((task) => ({
       id: randomUUID(),
       title: task.title,
+      description: task.description,
       estimatedMinutes: task.estimatedMinutes,
     }));
 
@@ -136,12 +141,104 @@ export const cancelTasksTool = new FunctionTool({
 
     if (schedule && userId) {
       await Promise.all(
-        schedule.scheduled.map((entry) => calendarClient.deleteEvent(userId, entry.googleEventId)),
+        schedule.scheduled.map(async (entry) => {
+          await calendarClient.deleteEvent(userId, entry.googleEventId);
+          await db
+            .update(tasksTable)
+            .set({ status: "cancelled" })
+            .where(eq(tasksTable.id, entry.taskId));
+        }),
       );
     }
 
     toolContext?.state.set("current_tasks", undefined);
     toolContext?.state.set("current_schedule", undefined);
     return { cancelled: hadTasks };
+  },
+});
+
+export const updateStudySessionTool = new FunctionTool({
+  name: "update_study_session",
+  description:
+    "Edit an already-scheduled study session: change its description and/or move it to a new " +
+    "time. Looks the session up by title, so it works even in a new conversation (it's backed by " +
+    "the database, not just this chat's memory). Call this when the student asks to reschedule a " +
+    "specific session or change what it covers.",
+  parameters: z.object({
+    title: z
+      .string()
+      .describe("The study session's title, or close to it, as the student refers to it."),
+    newDescription: z.string().optional().describe("New description, if the student wants one."),
+    newStart: z
+      .string()
+      .optional()
+      .describe(
+        "New ISO 8601 start time, if rescheduling. The session keeps its original duration " +
+          "unless newEnd is also given.",
+      ),
+    newEnd: z
+      .string()
+      .optional()
+      .describe("New ISO 8601 end time. Only meaningful together with newStart."),
+  }),
+  async execute({ title, newDescription, newStart, newEnd }, toolContext) {
+    const userId = toolContext?.state.get<string>("user_id");
+    if (!userId) {
+      return { error: "Could not identify the student." };
+    }
+    if (newDescription === undefined && newStart === undefined) {
+      return { error: "Nothing to update — specify a new description and/or a new time." };
+    }
+
+    const matches = await db
+      .select()
+      .from(tasksTable)
+      .where(
+        and(
+          eq(tasksTable.userId, userId),
+          eq(tasksTable.status, "scheduled"),
+          ilike(tasksTable.title, `%${title}%`),
+        ),
+      );
+
+    if (matches.length === 0) {
+      return { error: `No scheduled session matching "${title}" was found.` };
+    }
+    if (matches.length > 1) {
+      return {
+        error: `Multiple scheduled sessions match "${title}": ${matches.map((m) => m.title).join(", ")}. Ask which one.`,
+      };
+    }
+
+    const task = matches[0]!;
+    if (!task.googleEventId) {
+      return { error: "This session has no linked calendar event to update." };
+    }
+
+    const newStartDate = newStart ? new Date(newStart) : undefined;
+    const durationMs =
+      task.scheduledStart && task.scheduledEnd
+        ? task.scheduledEnd.getTime() - task.scheduledStart.getTime()
+        : task.estimatedMinutes * 60_000;
+    const newEndDate = newEnd
+      ? new Date(newEnd)
+      : newStartDate
+        ? new Date(newStartDate.getTime() + durationMs)
+        : undefined;
+
+    await calendarClient.updateEvent(userId, task.googleEventId, {
+      ...(newDescription !== undefined ? { description: newDescription } : {}),
+      ...(newStartDate ? { start: newStartDate, end: newEndDate } : {}),
+    });
+
+    await db
+      .update(tasksTable)
+      .set({
+        ...(newDescription !== undefined ? { description: newDescription } : {}),
+        ...(newStartDate ? { scheduledStart: newStartDate, scheduledEnd: newEndDate } : {}),
+      })
+      .where(eq(tasksTable.id, task.id));
+
+    return { updated: true, title: task.title };
   },
 });

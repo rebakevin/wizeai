@@ -16,6 +16,7 @@ export const PlannerGenerateInputSchema = z.object({
 
 export const TaskBreakdownItemSchema = z.object({
   title: z.string(),
+  description: z.string(),
   estimatedMinutes: z.number().int().positive(),
 });
 

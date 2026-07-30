@@ -16,6 +16,7 @@ export const ScheduleCreateInputSchema = z.object({
       z.object({
         id: z.string(),
         title: z.string(),
+        description: z.string().optional(),
         estimatedMinutes: z.number().int().positive(),
       }),
     )
