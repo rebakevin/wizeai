@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { FunctionTool } from "@google/adk";
 import { z } from "zod";
+import { canvasClient } from "../canvas/realCanvasClient";
 import { generate as generatePlan } from "../planner/plannerService";
 import { createSchedule } from "../scheduler/schedulerService";
 
@@ -71,6 +72,37 @@ export const rescheduleTasksTool = new FunctionTool({
     toolContext?.state.set("current_schedule", result);
 
     return result;
+  },
+});
+
+export const getOpenAssignmentsTool = new FunctionTool({
+  name: "get_open_assignments",
+  description:
+    "Fetch the student's open (not yet due) Canvas assignments across all their active courses. " +
+    "Call this whenever the student asks what's due, what assignments they have, or similar.",
+  async execute(_input, toolContext) {
+    const userId = toolContext?.state.get<string>("user_id");
+    if (!userId) {
+      return { error: "Could not identify the student." };
+    }
+
+    try {
+      const assignments = await canvasClient.listAssignments(userId);
+      return {
+        assignments: assignments.map((a) => ({
+          title: a.title,
+          pointsPossible: a.pointsPossible,
+          deadline: a.deadline.toISOString(),
+        })),
+      };
+    } catch (err) {
+      return {
+        error:
+          err instanceof Error
+            ? err.message
+            : "Failed to fetch assignments from Canvas.",
+      };
+    }
   },
 });
 
