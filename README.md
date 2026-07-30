@@ -14,7 +14,7 @@ Encourage students to use AI to build responsible learning habits instead of dev
 
 1. Clone the repo
 2. `cp .env.example .env`
-3. Get the latest `api` and `web` image tags from the [package page](https://github.com/rebakevin/wizeai/pkgs/container/wizeai-api) and put them in `.env` (`API_IMAGE_TAG`, `WEB_IMAGE_TAG`)
+3. Get the latest `api` and `web` image tags from the [package page](https://github.com/rebakevin?tab=packages&repo_name=wizeai) and put them in `.env` (`API_IMAGE_TAG`, `WEB_IMAGE_TAG`)
 4. Fill in the rest of the values in `.env`
 5. `docker compose up -d`
 6. Open `http://localhost:5173`
