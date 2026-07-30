@@ -17,7 +17,7 @@ services:
       retries: 10
 
   api:
-    image: ghcr.io/rebakevin/wizeai-api:latest
+    image: ghcr.io/rebakevin/wizeai-api:${API_IMAGE_TAG}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -32,7 +32,7 @@ services:
         condition: service_healthy
 
   web:
-    image: ghcr.io/rebakevin/wizeai-web:latest
+    image: ghcr.io/rebakevin/wizeai-web:${WEB_IMAGE_TAG}
     restart: unless-stopped
     ports:
       - "5173:80"
