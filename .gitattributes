@@ -1,0 +1,11 @@
+# Force LF regardless of the cloning OS — Docker Compose and the Linux-based
+# images in this repo (Dockerfiles, nginx.conf, .env files) don't tolerate
+# CRLF, which Windows' default git autocrlf=true would otherwise introduce.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.woff binary
+*.woff2 binary

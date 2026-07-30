@@ -8,6 +8,7 @@ Encourage students to use AI to build responsible learning habits instead of dev
 - Google Cloud OAuth client (Client ID + Secret) with Calendar scope
 - Meta WhatsApp Business API app (access token, phone number ID, verify token)
 - ngrok (or another HTTPS tunnel), for WhatsApp
+- Ports `5173`, `3001`, `5432` must be free
 
 ## Run with Docker Compose
 
