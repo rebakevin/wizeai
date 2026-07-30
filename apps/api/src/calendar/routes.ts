@@ -3,37 +3,10 @@ import { z } from "zod";
 import { fromNodeHeaders } from "better-auth/node";
 import { auth } from "../auth/auth";
 import { DEMO_USER_ID } from "../lib/demoUser";
-import { calendarClient } from "./mockCalendarClient";
+import { calendarClient } from "./realCalendarClient";
+import { isCalendarConnected } from "./googleAccountStatus";
 
 export const calendarRouter = Router();
-
-export const CalendarConnectSchema = z.object({
-  accessToken: z.string(),
-  refreshToken: z.string().optional(),
-});
-
-calendarRouter.post("/connect", async (req, res) => {
-  const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
-  if (!session) {
-    res.status(401).json({ error: "Not authenticated" });
-    return;
-  }
-
-  const body = CalendarConnectSchema.parse(req.body ?? {});
-  await calendarClient.connect(session.user.id, body.accessToken, body.refreshToken);
-  res.status(201).json({ connected: true });
-});
-
-calendarRouter.post("/disconnect", async (req, res) => {
-  const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
-  if (!session) {
-    res.status(401).json({ error: "Not authenticated" });
-    return;
-  }
-
-  await calendarClient.disconnect(session.user.id);
-  res.json({ connected: false });
-});
 
 calendarRouter.get("/status", async (req, res) => {
   const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
@@ -42,7 +15,7 @@ calendarRouter.get("/status", async (req, res) => {
     return;
   }
 
-  res.json({ connected: await calendarClient.isConnected(session.user.id) });
+  res.json({ connected: await isCalendarConnected(session.user.id) });
 });
 
 calendarRouter.post("/sync", async (req, res) => {
