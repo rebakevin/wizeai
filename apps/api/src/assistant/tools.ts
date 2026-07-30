@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { FunctionTool } from "@google/adk";
 import { z } from "zod";
+import type { ScheduleResult } from "@wizeai/shared/types";
+import { calendarClient } from "../calendar/realCalendarClient";
 import { canvasClient } from "../canvas/realCanvasClient";
 import { generate as generatePlan } from "../planner/plannerService";
 import { createSchedule } from "../scheduler/schedulerService";
@@ -22,10 +24,26 @@ export const breakdownAssignmentTool = new FunctionTool({
     title: z.string().describe("The assignment's title."),
     description: z.string().optional().describe("Any extra detail about the assignment."),
     deadline: z.string().describe("The assignment's deadline, as an ISO 8601 date-time string."),
+    sessionCount: z
+      .number()
+      .int()
+      .min(1)
+      .optional()
+      .describe("Number of study sessions, if the student specified one. Omit otherwise."),
+    sessionMinutes: z
+      .number()
+      .int()
+      .min(1)
+      .optional()
+      .describe("Minutes per study session, if the student specified one. Omit otherwise."),
   }),
-  async execute({ title, description, deadline }, toolContext) {
+  async execute({ title, description, deadline, sessionCount, sessionMinutes }, toolContext) {
     const breakdown = await generatePlan({
       assignment: { title, description: description ?? null, deadline: new Date(deadline) },
+      constraints:
+        sessionCount !== undefined || sessionMinutes !== undefined
+          ? { taskCount: sessionCount, minutesPerTask: sessionMinutes }
+          : undefined,
     });
 
     const tasks: SessionTask[] = breakdown.tasks.map((task) => ({
@@ -109,10 +127,19 @@ export const getOpenAssignmentsTool = new FunctionTool({
 export const cancelTasksTool = new FunctionTool({
   name: "cancel_tasks",
   description:
-    "Cancel the current task breakdown and any schedule made from it. " +
-    "Call this when the user asks to cancel or drop their current plan.",
+    "Cancel the current task breakdown and any schedule made from it, deleting any calendar " +
+    "events already created. Call this when the user asks to cancel or drop their current plan.",
   async execute(_input, toolContext) {
     const hadTasks = Boolean(toolContext?.state.get("current_tasks"));
+    const schedule = toolContext?.state.get<ScheduleResult>("current_schedule");
+    const userId = toolContext?.state.get<string>("user_id");
+
+    if (schedule && userId) {
+      await Promise.all(
+        schedule.scheduled.map((entry) => calendarClient.deleteEvent(userId, entry.googleEventId)),
+      );
+    }
+
     toolContext?.state.set("current_tasks", undefined);
     toolContext?.state.set("current_schedule", undefined);
     return { cancelled: hadTasks };
