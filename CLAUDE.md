@@ -302,3 +302,32 @@ Drizzle ORM against Postgres, using Bun's native driver (`drizzle-orm/bun-sql`),
 `postgres-js`/`node-postgres`. `apps/api/drizzle.config.ts` points at `src/db/schema.ts` and
 outputs migrations to `apps/api/drizzle/`. Local Postgres is `docker-compose.yml` at the repo
 root (`wizeai`/`wizeai`/`wizeai`, port 5432) — it is not started automatically by anything.
+
+### Docker / GHCR
+
+`.github/workflows/docker-publish.yml` builds and pushes `apps/api/Dockerfile` and
+`apps/web/Dockerfile` to `ghcr.io/rebakevin/wizeai-api` / `wizeai-web` (`:latest` + short-sha tags),
+triggered manually (`workflow_dispatch`) from the Actions tab — not on every push to `main`. Both
+Dockerfiles build from the **repo root** context (not their app directory) since this is a Bun
+workspace and `apps/api`/`apps/web` depend on `packages/shared` via `workspace:*`. The api image
+runs `bunx drizzle-kit migrate` on every container start before booting the server — a fresh clone
+should end up with a ready schema, not an empty database — so it's not a `--production` install
+(needs `drizzle-kit`, a devDependency, at runtime). The web image is multi-stage: `bun run build`
+in a build stage, then only the static `dist/` output ships in a final `nginx:1.27-alpine` stage;
+`apps/web/nginx.conf` proxies `/api/` to the `api` service so the browser sees web and API as the
+same origin (mirrors vite's dev-server proxy — Better Auth's session cookie needs that).
+`docker-compose.yml` at the repo root wires `postgres` + `api` + `web` together against those
+published images, pinned by tag — `image: ghcr.io/rebakevin/wizeai-api:${API_IMAGE_TAG}` /
+`wizeai-web:${WEB_IMAGE_TAG}`, deliberately not `:latest`. (Compose's `${VAR:?message}`
+required-variable syntax would fail even louder on a missing tag, but IDE compose-schema linters
+tend to misparse the `:?` inside an `image:` value as a second `name:tag` separator and flag
+"single image reference expected" — plain `${VAR}` avoids that false positive; an unset tag still
+resolves to an invalid `...api:` reference and fails on pull, just with Docker's own error instead
+of a custom message.) `.env.example` documents `API_IMAGE_TAG`/
+`WEB_IMAGE_TAG` as blank — a user picks an actual tag off the GHCR package page (short sha, e.g.
+`sha-abc1234`) and sets it in `.env` before `docker compose up`. `api`'s `DATABASE_URL` is
+overridden in `environment:` to point at the `postgres` service name rather than whatever `.env`
+says, since `localhost` doesn't resolve to Postgres from inside the container. **GHCR packages are
+private by default** — after the first workflow run, the packages need their visibility set to
+Public in GitHub (repo → Packages → each package → Package settings) or `docker compose up` will
+fail to pull with a 401/denied for anyone who isn't logged in via `docker login ghcr.io`.

@@ -10,6 +10,34 @@ services:
       - "5432:5432"
     volumes:
       - wizeai-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wizeai"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    image: ghcr.io/rebakevin/wizeai-api:${API_IMAGE_TAG}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Overrides whatever DATABASE_URL is in .env — inside the compose
+      # network Postgres is reachable at the "postgres" service name, not
+      # localhost.
+      DATABASE_URL: postgres://wizeai:wizeai@postgres:5432/wizeai
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    image: ghcr.io/rebakevin/wizeai-web:${WEB_IMAGE_TAG}
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
 
 volumes:
   wizeai-postgres-data:
