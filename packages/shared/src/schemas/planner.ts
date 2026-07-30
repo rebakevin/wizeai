@@ -6,6 +6,12 @@ export const PlannerGenerateInputSchema = z.object({
     description: z.string().nullable(),
     deadline: z.coerce.date(),
   }),
+  constraints: z
+    .object({
+      taskCount: z.number().int().positive().optional(),
+      minutesPerTask: z.number().int().positive().optional(),
+    })
+    .optional(),
 });
 
 export const TaskBreakdownItemSchema = z.object({

@@ -18,14 +18,6 @@ export const CanvasConnectionSchema = z.object({
   createdAt: z.coerce.date(),
 });
 
-export const GoogleConnectionSchema = z.object({
-  id: z.string(),
-  userId: z.string(),
-  accessToken: z.string(),
-  refreshToken: z.string().nullable(),
-  createdAt: z.coerce.date(),
-});
-
 export const WhatsappConnectionSchema = z.object({
   id: z.string(),
   userId: z.string(),

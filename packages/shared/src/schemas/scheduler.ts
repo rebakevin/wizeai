@@ -26,6 +26,7 @@ export const ScheduleCreateInputSchema = z.object({
 
 export const ScheduledTaskSchema = z.object({
   taskId: z.string(),
+  googleEventId: z.string(),
   start: z.coerce.date(),
   end: z.coerce.date(),
 });
