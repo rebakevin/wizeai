@@ -1,5 +1,11 @@
 import { addMinutes, subtractBusyBlocks } from "@wizeai/shared/utils";
-import type { BusyBlock, FreeSlot, ScheduleCreateInput, ScheduleResult } from "@wizeai/shared/types";
+import type {
+  BusyBlock,
+  FreeSlot,
+  ScheduleCreateInput,
+  ScheduleResult,
+} from "@wizeai/shared/types";
+import { inArray } from "drizzle-orm";
 import { db } from "../db/client";
 import { tasks as tasksTable } from "../db/schema";
 import { calendarClient } from "../calendar/realCalendarClient";
@@ -43,6 +49,7 @@ async function persistScheduledTask(
     scheduledStart: start,
     scheduledEnd: end,
     status: "scheduled" as const,
+    updatedAt: new Date(),
   };
 
   await db
@@ -58,6 +65,10 @@ async function persistScheduledTask(
  * into the first day's free time, which is what plain earliest-slot-first scheduling does. Each
  * successfully scheduled task is persisted to `tasks` (upserted by id) alongside the real calendar
  * event. Tasks that don't fit anywhere in the range come back as `unscheduled`.
+ *
+ * If a task already has a googleEventId (it was scheduled once before and is being rescheduled),
+ * the existing calendar event is moved via updateEvent instead of creating a second one — calling
+ * this twice on the same tasks used to silently orphan the first batch of calendar events.
  */
 export async function createSchedule(
   userId: string,
@@ -68,6 +79,17 @@ export async function createSchedule(
   const freeSlotsByDay: FreeSlot[][] = days.map((day) =>
     subtractBusyBlocks(day.start, day.end, busyBlocks as BusyBlock[]),
   );
+
+  const existingRows = await db
+    .select({ id: tasksTable.id, googleEventId: tasksTable.googleEventId })
+    .from(tasksTable)
+    .where(
+      inArray(
+        tasksTable.id,
+        input.tasks.map((t) => t.id),
+      ),
+    );
+  const existingEventIds = new Map(existingRows.map((row) => [row.id, row.googleEventId]));
 
   const scheduled: ScheduleResult["scheduled"] = [];
   const unscheduled: string[] = [];
@@ -87,14 +109,22 @@ export async function createSchedule(
       const start = slot.start;
       const end = addMinutes(start, task.estimatedMinutes);
 
-      const createdEvent = await calendarClient.createEvent(userId, {
-        title: task.title,
-        description: task.description,
-        start,
-        end,
-      });
-      await persistScheduledTask(userId, task, start, end, createdEvent.googleEventId);
-      scheduled.push({ taskId: task.id, googleEventId: createdEvent.googleEventId, start, end });
+      const existingEventId = existingEventIds.get(task.id);
+      const scheduledEvent = existingEventId
+        ? await calendarClient.updateEvent(userId, existingEventId, {
+            title: task.title,
+            description: task.description,
+            start,
+            end,
+          })
+        : await calendarClient.createEvent(userId, {
+            title: task.title,
+            description: task.description,
+            start,
+            end,
+          });
+      await persistScheduledTask(userId, task, start, end, scheduledEvent.googleEventId);
+      scheduled.push({ taskId: task.id, googleEventId: scheduledEvent.googleEventId, start, end });
 
       if (end.getTime() === slot.end.getTime()) {
         freeSlots.splice(slotIndex, 1);
