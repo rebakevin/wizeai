@@ -24,7 +24,16 @@ app.use(cors({ origin: env.WEB_ORIGIN, credentials: true }));
 // mounted before express.json() runs.
 app.all("/api/auth/*splat", asHandler(authHandler));
 
-app.use(express.json());
+// The `verify` callback stashes the raw bytes on the request before Express
+// parses them — needed to check the WhatsApp webhook's HMAC signature, which
+// is computed over the raw body, not the re-serialized parsed JSON.
+app.use(
+  express.json({
+    verify: (req, _res, buf) => {
+      (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
+    },
+  }),
+);
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });

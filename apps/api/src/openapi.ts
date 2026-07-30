@@ -140,7 +140,10 @@ registry.registerPath({
 registry.registerPath({
   method: "post",
   path: "/api/whatsapp/connect",
-  summary: "Connect WhatsApp (mocked)",
+  summary: "Record a WhatsApp phone number for a user account",
+  description:
+    "Writes a whatsapp_connections row. Not yet consulted by the chat flow below — inbound " +
+    "messages are handled per phone number regardless of any linked account.",
   tags: ["WhatsApp"],
   request: { body: { content: { "application/json": { schema: WhatsappConnectSchema } } } },
   responses: {
@@ -155,6 +158,7 @@ registry.registerPath({
   method: "get",
   path: "/api/whatsapp/webhook",
   summary: "WhatsApp webhook verification handshake",
+  description: "Called once by Meta when you save the Callback URL in the app dashboard.",
   tags: ["WhatsApp"],
   request: {
     query: z.object({
@@ -172,9 +176,35 @@ registry.registerPath({
 registry.registerPath({
   method: "post",
   path: "/api/whatsapp/webhook",
-  summary: "Receive a WhatsApp webhook event",
+  summary: "Receive a WhatsApp message event",
+  description:
+    "Called by Meta for each inbound message/status event. Acks immediately, then " +
+    "asynchronously replies to any text message via the same agent as POST /api/agent/chat, " +
+    "using the sender's phone number as the chat session's userId.",
   tags: ["WhatsApp"],
-  responses: { 200: { description: "Acknowledged." } },
+  responses: { 200: { description: "Acknowledged." }, 403: { description: "Invalid signature." } },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/whatsapp/send",
+  summary: "Send a WhatsApp text message directly (dev/testing convenience)",
+  tags: ["WhatsApp"],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: z.object({ to: z.string(), text: z.string() }),
+        },
+      },
+    },
+  },
+  responses: {
+    201: {
+      description: "Sent.",
+      content: { "application/json": { schema: z.object({ messageId: z.string() }) } },
+    },
+  },
 });
 
 registry.registerPath({
