@@ -23,10 +23,34 @@ Encourage students to use AI to build responsible learning habits instead of dev
 8. Set the ngrok URL + `/api/whatsapp/webhook` as the webhook URL in the Meta App Dashboard
 9. Connect to all 3 platforms - Canvas as student, WhatsApp, Google Calendar in the web app
 10. With Meta properly set up, send your first message from Meta to WhatsApp to interact for the first time with the test number. From that point on, you can talk to the agent freely.
+
+<details>
+<summary>Test number & credentials</summary>
+
 ![img.png](img.png)
-![img_1.png](img_1.png)
+
+</details>
+
+<details>
+<summary>Sending a test message</summary>
+
+![img_4.png](img_4.png)
+
+</details>
+
+<details>
+<summary>Webhook callback URL</summary>
+
 ![img_2.png](img_2.png)
+
+</details>
+
+<details>
+<summary>Webhook field subscription</summary>
+
 ![img_3.png](img_3.png)
+
+</details>
 
 ### Platform setup
 
