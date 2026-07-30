@@ -15,12 +15,24 @@ function buildPrompt(input: PlannerGenerateInput): string {
     `Deadline: ${deadline.toISOString()}`,
   ];
 
-  const { taskCount, minutesPerTask } = input.constraints ?? {};
+  const { taskCount, minutesPerTask, existingLoadMinutes, bufferDays } = input.constraints ?? {};
   if (taskCount !== undefined) {
     lines.push(`Produce exactly ${taskCount} tasks.`);
   }
   if (minutesPerTask !== undefined) {
     lines.push(`Each task's estimatedMinutes should be ${minutesPerTask}.`);
+  }
+  if (existingLoadMinutes !== undefined && existingLoadMinutes > 0) {
+    lines.push(
+      `The student already has ${existingLoadMinutes} minutes of other study sessions scheduled ` +
+        "before this deadline — avoid overloading further; keep total new study time proportionate.",
+    );
+  }
+  if (bufferDays !== undefined && bufferDays > 0) {
+    lines.push(
+      `Leave at least ${bufferDays} day(s) of buffer before the deadline for review — the last ` +
+        "task shouldn't be substantial new work due right at the deadline itself.",
+    );
   }
 
   return lines.join("\n");

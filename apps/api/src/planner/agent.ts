@@ -15,7 +15,11 @@ Each task needs:
   assignment, not generic advice. Plain text, no markdown (it goes straight into a calendar
   event's description field).
 - a realistic estimatedMinutes (typically between 15 and 120)
-Prefer 3-6 tasks. Respond ONLY with JSON matching the required schema — no extra commentary.`,
+Prefer 3-6 tasks. If the prompt mentions the student's existing scheduled study load or a
+buffer-day requirement, actually act on it: prefer fewer/shorter tasks or lower total estimated
+minutes when the student is already loaded up, and make sure the plan leaves room for a final
+review pass rather than scheduling serious new work right at the deadline. Respond ONLY with JSON
+matching the required schema — no extra commentary.`,
   outputSchema: taskBreakdownAdkSchema,
   outputKey: TASK_BREAKDOWN_OUTPUT_KEY,
 });

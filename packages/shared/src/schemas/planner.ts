@@ -10,6 +10,8 @@ export const PlannerGenerateInputSchema = z.object({
     .object({
       taskCount: z.number().int().positive().optional(),
       minutesPerTask: z.number().int().positive().optional(),
+      existingLoadMinutes: z.number().int().nonnegative().optional(),
+      bufferDays: z.number().int().nonnegative().optional(),
     })
     .optional(),
 });

@@ -4,6 +4,9 @@ const EnvSchema = z.object({
   // app
   DATABASE_URL: z.string().min(1),
   PORT: z.coerce.number().int().positive().default(3001),
+  // IANA timezone used to format dates/times in WhatsApp message templates. Stopgap until
+  // per-student timezone preferences exist.
+  DEFAULT_TIMEZONE: z.string().default("UTC"),
 
   // Google
   GEMINI_API_KEY: z.string().min(1),

@@ -90,6 +90,39 @@ public, unauthenticated endpoint on a public ngrok URL that triggers real outbou
 
 App Dashboard → App Settings → Basic → **App Secret** → Show → paste into `apps/api/.env`.
 
+## Update: outbound sends failing with access-denied — root cause found
+
+Symptom: inbound webhooks worked fine, but every outbound send failed — both `sendText` in the
+app (`403 (#131005) Access denied`) and Meta's own App Dashboard "Send message" test button
+(same recipient, "There was a problem with the access token or permissions"). The fact that
+Meta's own dashboard button failed too (not just our code) was the key signal this wasn't an
+app/token/`.env` issue at all.
+
+Diagnosis, in order:
+1. `GET /v23.0/{PHONE_NUMBER_ID}?fields=display_phone_number,verified_name` — token authenticates
+   fine, rules out an invalid/wrong-app token.
+2. `GET /v23.0/debug_token?input_token=...&access_token=...` — token has both
+   `whatsapp_business_messaging` and `whatsapp_business_management` scopes and wasn't expired,
+   ruling out a permissions/scope or expiry problem.
+3. `GET /v23.0/{WABA_ID}/phone_numbers` for each WABA the token's `whatsapp_business_management`
+   scope listed target_ids for — this is what found it: the test number's own
+   `code_verification_status` is `"NOT_VERIFIED"`. **A phone number that hasn't completed
+   verification can receive webhooks and answer metadata reads, but Meta blocks it from sending
+   anything** — which is exactly the mismatch between "webhooks work" and "every send fails."
+
+Fix: App Dashboard → WhatsApp → API Setup → the "From" number section (or
+business.facebook.com → WhatsApp Manager → Phone Numbers) → find a **Verify** / complete-setup
+action next to the test number and trigger it. For Meta's own shared test number this is
+typically a one-click confirmation, not an SMS you need to actually receive on a device you don't
+have. Re-check with:
+
+```bash
+curl -s "https://graph.facebook.com/v23.0/1357224159315007/phone_numbers" \
+  -H "Authorization: Bearer $TOKEN" | python3 -c "import json,sys; print(json.load(sys.stdin)['data'][0]['code_verification_status'])"
+```
+
+Expect `VERIFIED` before retrying a send.
+
 ## Constraint worth knowing now (nothing to do yet)
 
 Meta's **24-hour customer service window**: free-form text replies are only allowed within 24h

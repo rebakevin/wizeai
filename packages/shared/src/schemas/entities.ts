@@ -3,6 +3,7 @@ import { z } from "zod";
 export const AssignmentStatusSchema = z.enum(["pending", "in_progress", "completed"]);
 export const TaskStatusSchema = z.enum([
   "pending",
+  "proposed",
   "scheduled",
   "completed",
   "skipped",
@@ -53,7 +54,9 @@ export const TaskSchema = z.object({
   scheduledStart: z.coerce.date().nullable(),
   scheduledEnd: z.coerce.date().nullable(),
   status: TaskStatusSchema,
+  planBatchId: z.string().nullable(),
   createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
 });
 
 export const CalendarEventSchema = z.object({

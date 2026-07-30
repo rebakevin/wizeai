@@ -2,12 +2,13 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { canvasConnections } from "../db/schema";
-import type { CanvasAssignment, CanvasClient } from "./canvasClient";
+import type { CanvasAssignment, CanvasClient, CourseGrade } from "./canvasClient";
 
 const PER_PAGE = 100;
 
 interface CanvasCourse {
   id: number;
+  name: string;
 }
 
 interface CanvasAssignmentDto {
@@ -16,6 +17,16 @@ interface CanvasAssignmentDto {
   description: string | null;
   due_at: string | null;
   points_possible: number | null;
+}
+
+interface CanvasEnrollmentDto {
+  course_id: number;
+  grades: {
+    current_score: number | null;
+    current_grade: string | null;
+    final_score: number | null;
+    final_grade: string | null;
+  };
 }
 
 function stripTrailingSlash(url: string): string {
@@ -109,6 +120,38 @@ export class RealCanvasClient implements CanvasClient {
   async getAssignment(userId: string, canvasId: string): Promise<CanvasAssignment | null> {
     const assignments = await this.listAssignments(userId);
     return assignments.find((a) => a.canvasId === canvasId) ?? null;
+  }
+
+  async listGrades(userId: string): Promise<CourseGrade[]> {
+    const connection = await getConnection(userId);
+    if (!connection) {
+      throw new Error("Canvas is not connected for this account.");
+    }
+    const { canvasBaseUrl, accessToken } = connection;
+
+    const [courses, enrollments] = await Promise.all([
+      canvasFetch<CanvasCourse[]>(
+        canvasBaseUrl,
+        accessToken,
+        `/api/v1/courses?enrollment_state=active&per_page=${PER_PAGE}`,
+      ),
+      canvasFetch<CanvasEnrollmentDto[]>(
+        canvasBaseUrl,
+        accessToken,
+        `/api/v1/users/self/enrollments?type[]=StudentEnrollment&state[]=active&per_page=${PER_PAGE}`,
+      ),
+    ]);
+
+    const courseNames = new Map(courses.map((course) => [course.id, course.name]));
+
+    return enrollments.map((enrollment) => ({
+      courseId: String(enrollment.course_id),
+      courseName: courseNames.get(enrollment.course_id) ?? `Course ${enrollment.course_id}`,
+      currentScore: enrollment.grades.current_score,
+      currentGrade: enrollment.grades.current_grade,
+      finalScore: enrollment.grades.final_score,
+      finalGrade: enrollment.grades.final_grade,
+    }));
   }
 }
 
