@@ -7,11 +7,15 @@ import { chat } from "../assistant/assistantService";
 import { sendReadReceiptAndTyping, sendText } from "./graphClient";
 import { chunkForWhatsapp } from "./messageFormat";
 import { enqueue, markSeen } from "./inboundQueue";
+import { findUserIdByPhoneNumber, normalizePhoneNumber } from "./phoneNumber";
 import type { WhatsappClient } from "./whatsappClient";
 
 const STALE_MESSAGE_MS = 5 * 60 * 1000;
 const NON_TEXT_REPLY = "I can only read text messages right now — mind typing it out?";
 const CHAT_FAILURE_REPLY = "Sorry — something went wrong on my end. Mind sending that again?";
+const UNLINKED_SENDER_REPLY =
+  "I don't recognize this number yet — connect it to your account in the Wize AI app first " +
+  "(Account → Connect WhatsApp), then message me again.";
 
 const WebhookPayloadSchema = z.object({
   entry: z
@@ -58,15 +62,27 @@ const WebhookPayloadSchema = z.object({
 
 export class RealWhatsappClient implements WhatsappClient {
   async connect(userId: string, phoneNumber: string): Promise<void> {
-    await db.insert(whatsappConnections).values({
-      id: randomUUID(),
-      userId,
-      phoneNumber,
-    });
+    const normalized = normalizePhoneNumber(phoneNumber);
+    await db
+      .insert(whatsappConnections)
+      .values({ id: randomUUID(), userId, phoneNumber: normalized })
+      .onConflictDoUpdate({
+        target: whatsappConnections.userId,
+        set: { phoneNumber: normalized },
+      });
   }
 
   async disconnect(userId: string): Promise<void> {
     await db.delete(whatsappConnections).where(eq(whatsappConnections.userId, userId));
+  }
+
+  async isConnected(userId: string): Promise<boolean> {
+    const [connection] = await db
+      .select({ id: whatsappConnections.id })
+      .from(whatsappConnections)
+      .where(eq(whatsappConnections.userId, userId))
+      .limit(1);
+    return connection !== undefined;
   }
 
   async sendMessage(to: string, text: string): Promise<{ messageId: string }> {
@@ -123,11 +139,18 @@ export class RealWhatsappClient implements WhatsappClient {
           });
         }
 
+        const userId = await findUserIdByPhoneNumber(message.from);
+        if (!userId) {
+          console.log(`[whatsapp] no linked account for ${message.from}`);
+          await this.sendMessage(message.from, UNLINKED_SENDER_REPLY);
+          return;
+        }
+
         let reply: string;
         try {
-          reply = await chat(message.from, body);
+          reply = await chat(userId, body);
         } catch (err) {
-          console.error(`[whatsapp] chat() failed for ${message.from}:`, err);
+          console.error(`[whatsapp] chat() failed for ${message.from} (user ${userId}):`, err);
           reply = CHAT_FAILURE_REPLY;
         }
 

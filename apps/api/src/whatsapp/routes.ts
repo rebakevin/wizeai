@@ -1,14 +1,14 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { Router, type Request } from "express";
 import { z } from "zod";
+import { fromNodeHeaders } from "better-auth/node";
+import { auth } from "../auth/auth";
 import { env } from "../config/env";
-import { DEMO_USER_ID } from "../lib/demoUser";
 import { whatsappClient } from "./realWhatsappClient";
 
 export const whatsappRouter = Router();
 
 export const WhatsappConnectSchema = z.object({
-  userId: z.string().default(DEMO_USER_ID),
   phoneNumber: z.string(),
 });
 
@@ -43,9 +43,36 @@ function isValidSignature(req: Request): boolean {
 }
 
 whatsappRouter.post("/connect", async (req, res) => {
+  const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+  if (!session) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+
   const body = WhatsappConnectSchema.parse(req.body ?? {});
-  await whatsappClient.connect(body.userId, body.phoneNumber);
+  await whatsappClient.connect(session.user.id, body.phoneNumber);
   res.status(201).json({ connected: true });
+});
+
+whatsappRouter.post("/disconnect", async (req, res) => {
+  const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+  if (!session) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+
+  await whatsappClient.disconnect(session.user.id);
+  res.json({ connected: false });
+});
+
+whatsappRouter.get("/status", async (req, res) => {
+  const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+  if (!session) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+
+  res.json({ connected: await whatsappClient.isConnected(session.user.id) });
 });
 
 whatsappRouter.get("/webhook", (req, res) => {

@@ -19,16 +19,34 @@ export const api = {
       body: JSON.stringify(body),
     });
   },
+  disconnectCanvas() {
+    return apiFetch<{ connected: boolean }>("/canvas/disconnect", { method: "POST" });
+  },
+  getCanvasStatus() {
+    return apiFetch<{ connected: boolean }>("/canvas/status");
+  },
   connectCalendar(body: { accessToken: string; refreshToken?: string }) {
     return apiFetch<{ connected: boolean }>("/calendar/connect", {
       method: "POST",
       body: JSON.stringify(body),
     });
   },
+  disconnectCalendar() {
+    return apiFetch<{ connected: boolean }>("/calendar/disconnect", { method: "POST" });
+  },
+  getCalendarStatus() {
+    return apiFetch<{ connected: boolean }>("/calendar/status");
+  },
   connectWhatsapp(body: { phoneNumber: string }) {
     return apiFetch<{ connected: boolean }>("/whatsapp/connect", {
       method: "POST",
       body: JSON.stringify(body),
     });
+  },
+  disconnectWhatsapp() {
+    return apiFetch<{ connected: boolean }>("/whatsapp/disconnect", { method: "POST" });
+  },
+  getWhatsappStatus() {
+    return apiFetch<{ connected: boolean }>("/whatsapp/status");
   },
 };

@@ -50,6 +50,15 @@ export class MockCalendarClient implements CalendarClient {
     eventsByUser.delete(userId);
   }
 
+  async isConnected(userId: string): Promise<boolean> {
+    const [connection] = await db
+      .select({ id: googleConnections.id })
+      .from(googleConnections)
+      .where(eq(googleConnections.userId, userId))
+      .limit(1);
+    return connection !== undefined;
+  }
+
   async getEvents(
     userId: string,
     rangeStart: Date,

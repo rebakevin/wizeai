@@ -6,13 +6,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Wize AI's MVP: one job — never let a student miss an assignment deadline. It reads Canvas
 assignments, breaks them into study tasks with an AI planner, schedules them on Google Calendar,
-and lets the student talk to it over WhatsApp. Canvas and Google Calendar are still **mocked stub
-integrations** (fixture data / in-memory state). **WhatsApp is a real integration** (Meta's Cloud
-API) and is currently the only way an end user is meant to talk to the agent — anyone who messages
-the configured WhatsApp number gets a real conversation with the same Google ADK agent used by
-`POST /api/agent/chat`, with no login/account association yet. There is no dashboard; the web app
-only covers auth + connecting integrations (Canvas/Calendar/WhatsApp account-linking, separate from
-and not yet used by the WhatsApp chat flow).
+and lets the student talk to it over WhatsApp. Google Calendar is still a **mocked stub
+integration** (in-memory state). **Canvas and WhatsApp are real integrations.** Canvas talks to
+Instructure's REST API using a per-student personal access token; WhatsApp uses Meta's Cloud API
+and is currently the only way an end user is meant to talk to the agent. The web app (`apps/web`,
+behind a real Better Auth session via `RequireAuth`) is where a student connects both — Connect
+Canvas validates + stores their base URL and token, Connect WhatsApp stores their phone number —
+and that account link is what the WhatsApp webhook uses to resolve an inbound sender to a specific
+student before calling the agent; a message from an unlinked number gets a "connect your account
+first" reply instead of a generic session. There is no dashboard; the web app only covers auth +
+connecting integrations.
 
 ## Commands
 
@@ -89,11 +92,21 @@ validates `process.env` with Zod at import time (fails fast on boot if a require
   `accounts`/`verifications` (plural) instead of Better Auth's singular defaults, matching this
   project's other table names. The `openAPI()` plugin is enabled — its own reference UI is at
   `/api/auth/reference`.
-- **Mock integrations**: Canvas/Calendar `/connect`, `/disconnect`, `/sync` routes write real
-  connection rows to Postgres but return fixture/in-memory data (see each `mock*Client.ts`). These
-  operate against one seeded `DEMO_USER_ID` (`src/lib/demoUser.ts`) rather than a real session
-  user — they aren't wired to Better Auth sessions yet. WhatsApp's `/connect` route is the same
-  (DB row, unused so far) but WhatsApp's actual chat flow (below) is real.
+- **Calendar** (mock only): `/connect`, `/disconnect`, `/sync` write real connection rows to
+  Postgres but return fixture/in-memory data (`mockCalendarClient.ts`), against one seeded
+  `DEMO_USER_ID` (`src/lib/demoUser.ts`) — not wired to Better Auth sessions.
+- **Canvas** (`canvas/`): real integration against Instructure's REST API, `realCanvasClient.ts`
+  (`Authorization: Bearer <token>` against the student's stored `canvasBaseUrl`). Unlike
+  Calendar, `POST /canvas/connect` (and `POST /whatsapp/connect`) resolve the real logged-in
+  user via `auth.api.getSession({ headers: fromNodeHeaders(req.headers) })` — same pattern as
+  `auth/routes.ts`'s `/me` — and 401 without a session; `userId` is no longer accepted in the
+  request body. `connect()` validates the base URL/token with `GET /api/v1/users/self` *before*
+  saving anything (a bad token surfaces as a 400 immediately, not as a silent later failure), then
+  upserts (`onConflictDoUpdate` on `userId`, which is now `.unique()` on both `canvasConnections`
+  and `whatsappConnections`). `listAssignments()` calls `GET /api/v1/courses?enrollment_state=active`
+  then, per course, `GET /api/v1/courses/{id}/assignments?bucket=upcoming` — Canvas's own
+  "due in the future, not yet closed" filter is what defines "open." `mockCanvasClient.ts` still
+  exists but nothing imports it anymore.
 - **WhatsApp** (`whatsapp/`): real integration via Meta's Cloud API.
   `graphClient.ts.sendText()` POSTs to `graph.facebook.com/{WHATSAPP_API_VERSION}/{WHATSAPP_PHONE_NUMBER_ID}/messages`;
   `sendReadReceiptAndTyping()` marks the inbound message read and shows the typing indicator in
@@ -114,8 +127,13 @@ validates `process.env` with Zod at import time (fails fast on boot if a require
   distinguishable in logs from a chat failure. Replies over WhatsApp's 4096-char limit are split
   by `messageFormat.ts`'s `chunkForWhatsapp()` (paragraph → line → sentence → space → hard-cut
   boundary, sent sequentially so ordering is preserved) — sending over-length text otherwise gets
-  a Graph 400 and the student gets nothing. `sendMessage(to, text)` calls the sender's phone
-  number (`wa_id`) directly as the chat `userId` — no account lookup. `routes.ts`'s `POST /webhook`
+  a Graph 400 and the student gets nothing. Before calling the agent, the inbound sender (`wa_id`)
+  is normalized to digits-only (`phoneNumber.ts`'s `normalizePhoneNumber` — strips the `+` a web
+  form might include, since Meta's `wa_id` never has one) and looked up in `whatsappConnections`
+  via `findUserIdByPhoneNumber`; the resolved account id, not the raw phone number, is what gets
+  passed to `chat()` as both `userId` and ADK session id. An unrecognized number gets a fixed
+  "connect your number in the app first" reply and never reaches the agent. `routes.ts`'s
+  `POST /webhook`
   **acks 200 immediately** and processes/replies asynchronously (Meta expects a fast response; the
   agent call can take several seconds) and verifies `X-Hub-Signature-256` against
   `WHATSAPP_APP_SECRET` when that env var is set (skipped with a one-time warning otherwise) —
@@ -133,12 +151,17 @@ validates `process.env` with Zod at import time (fails fast on boot if a require
   conversations** — `dev:api`'s file-watch restarts on every save, which wipes the in-memory ADK
   session (see below) mid-conversation; keep using `dev:api` for everything else.
 - **Assistant** (`assistant/`): the general-purpose conversational agent — `POST /api/agent/chat`
-  and the WhatsApp flow above both go through `assistantService.chat(userId, message)`. Currently
-  **chat-only by design** (`agent.ts`'s `ENABLE_TOOLS = false`) so a WhatsApp conversation can't
-  have a tool fire mid-chat while that flow is still being verified — flip that one constant (and
-  its paired instruction text) to restore the three tools below. Unlike the Planner, this agent
-  has `tools` (`tools.ts`, built with ADK's `FunctionTool` + Zod `parameters`, not Gemini's
-  `Schema`/`Type`, currently dormant per `ENABLE_TOOLS`) and a **persistent** per-`userId` session
+  and the WhatsApp flow above both go through `assistantService.chat(userId, message)`. Task/
+  schedule actions are still gated off (`agent.ts`'s `ENABLE_TOOLS = false`) so a WhatsApp
+  conversation can't have a mutating tool fire mid-chat while that flow is still being verified —
+  flip that one constant (and its paired instruction text) to restore `breakdown_assignment`/
+  `reschedule_tasks`/`cancel_tasks`. One tool is exempt from the gate and always on:
+  `get_open_assignments` (`tools.ts`) is read-only (no state mutation, no scheduling side effect),
+  reads `userId` from `toolContext.state.get("user_id")` same as the gated tools, and calls
+  `canvasClient.listAssignments(userId)` — the instruction tells the model to present the result
+  as bullet points of title/marks/due date only. Unlike the Planner, this agent has `tools`
+  (`tools.ts`, built with ADK's `FunctionTool` + Zod `parameters`, not Gemini's `Schema`/`Type`)
+  and a **persistent** per-`userId` session
   (`InMemorySessionService.getOrCreateSession` + `Runner.runAsync`, not `runEphemeral`) so it
   remembers earlier turns (e.g. "why did you split it up that way?"). Tools read/write
   conversation state via `toolContext.state.get/set` — e.g. `breakdown_assignment` stores the
