@@ -1,10 +1,4 @@
-import {
-  boolean,
-  integer,
-  pgTable,
-  text,
-  timestamp,
-} from "drizzle-orm/pg-core";
+import { boolean, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
@@ -67,10 +61,18 @@ export const tasks = pgTable("tasks", {
   googleEventId: text("google_event_id"),
   scheduledStart: timestamp("scheduled_start", { withTimezone: true }),
   scheduledEnd: timestamp("scheduled_end", { withTimezone: true }),
-  status: text("status", { enum: ["pending", "scheduled", "completed", "skipped", "cancelled"] })
+  status: text("status", {
+    enum: ["pending", "proposed", "scheduled", "completed", "skipped", "cancelled"],
+  })
     .notNull()
     .default("pending"),
+  // Groups the tasks created by a single breakdown_assignment call, so the assistant can find
+  // "the plan currently being negotiated" (proposed, or already scheduled but not yet cancelled)
+  // from Postgres alone — durable across restarts and new conversations, not just ADK session
+  // state. Null for rows from the older POST /planner/generate path, which has no such concept.
+  planBatchId: text("plan_batch_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const calendarEvents = pgTable("calendar_events", {
