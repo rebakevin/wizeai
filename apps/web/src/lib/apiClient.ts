@@ -25,15 +25,6 @@ export const api = {
   getCanvasStatus() {
     return apiFetch<{ connected: boolean }>("/canvas/status");
   },
-  connectCalendar(body: { accessToken: string; refreshToken?: string }) {
-    return apiFetch<{ connected: boolean }>("/calendar/connect", {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
-  },
-  disconnectCalendar() {
-    return apiFetch<{ connected: boolean }>("/calendar/disconnect", { method: "POST" });
-  },
   getCalendarStatus() {
     return apiFetch<{ connected: boolean }>("/calendar/status");
   },
