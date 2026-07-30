@@ -2,7 +2,34 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { canvasConnections } from "../db/schema";
-import type { CanvasAssignment, CanvasClient } from "./canvasClient";
+import type { CanvasAssignment, CanvasClient, CourseGrade } from "./canvasClient";
+
+const FIXTURE_GRADES: CourseGrade[] = [
+  {
+    courseId: "course-1",
+    courseName: "History 101",
+    currentScore: 88,
+    currentGrade: "B+",
+    finalScore: null,
+    finalGrade: null,
+  },
+  {
+    courseId: "course-2",
+    courseName: "Calculus II",
+    currentScore: 76,
+    currentGrade: "C+",
+    finalScore: null,
+    finalGrade: null,
+  },
+  {
+    courseId: "course-3",
+    courseName: "Chemistry Lab",
+    currentScore: null,
+    currentGrade: null,
+    finalScore: null,
+    finalGrade: null,
+  },
+];
 
 const FIXTURE_ASSIGNMENTS: CanvasAssignment[] = [
   {
@@ -57,6 +84,10 @@ export class MockCanvasClient implements CanvasClient {
 
   async getAssignment(_userId: string, canvasId: string): Promise<CanvasAssignment | null> {
     return FIXTURE_ASSIGNMENTS.find((a) => a.canvasId === canvasId) ?? null;
+  }
+
+  async listGrades(_userId: string): Promise<CourseGrade[]> {
+    return FIXTURE_GRADES;
   }
 }
 
