@@ -27,16 +27,6 @@ export const canvasConnections = pgTable("canvas_connections", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const googleConnections = pgTable("google_connections", {
-  id: text("id").primaryKey(),
-  userId: text("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  accessToken: text("access_token").notNull(),
-  refreshToken: text("refresh_token"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
 export const whatsappConnections = pgTable("whatsapp_connections", {
   id: text("id").primaryKey(),
   userId: text("user_id")
@@ -129,4 +119,5 @@ export const verifications = pgTable("verifications", {
   value: text("value").notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
