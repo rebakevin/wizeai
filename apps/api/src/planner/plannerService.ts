@@ -9,11 +9,21 @@ const runner = new InMemoryRunner({ agent: plannerAgent, appName: "wizeai-planne
 
 function buildPrompt(input: PlannerGenerateInput): string {
   const { title, description, deadline } = input.assignment;
-  return [
+  const lines = [
     `Assignment title: ${title}`,
     `Description: ${description ?? "(none provided)"}`,
     `Deadline: ${deadline.toISOString()}`,
-  ].join("\n");
+  ];
+
+  const { taskCount, minutesPerTask } = input.constraints ?? {};
+  if (taskCount !== undefined) {
+    lines.push(`Produce exactly ${taskCount} tasks.`);
+  }
+  if (minutesPerTask !== undefined) {
+    lines.push(`Each task's estimatedMinutes should be ${minutesPerTask}.`);
+  }
+
+  return lines.join("\n");
 }
 
 export async function generate(input: PlannerGenerateInput): Promise<TaskBreakdown> {
@@ -38,6 +48,7 @@ export async function generate(input: PlannerGenerateInput): Promise<TaskBreakdo
 
 export async function generateAndPersist(
   assignmentId: string,
+  userId: string,
   input: PlannerGenerateInput,
 ): Promise<TaskBreakdown> {
   const breakdown = await generate(input);
@@ -45,8 +56,10 @@ export async function generateAndPersist(
   await db.insert(tasks).values(
     breakdown.tasks.map((task) => ({
       id: randomUUID(),
+      userId,
       assignmentId,
       title: task.title,
+      description: task.description,
       estimatedMinutes: task.estimatedMinutes,
     })),
   );

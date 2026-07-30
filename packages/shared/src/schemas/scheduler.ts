@@ -16,6 +16,7 @@ export const ScheduleCreateInputSchema = z.object({
       z.object({
         id: z.string(),
         title: z.string(),
+        description: z.string().optional(),
         estimatedMinutes: z.number().int().positive(),
       }),
     )
@@ -26,6 +27,7 @@ export const ScheduleCreateInputSchema = z.object({
 
 export const ScheduledTaskSchema = z.object({
   taskId: z.string(),
+  googleEventId: z.string(),
   start: z.coerce.date(),
   end: z.coerce.date(),
 });

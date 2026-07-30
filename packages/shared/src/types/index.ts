@@ -4,7 +4,6 @@ import type {
   AssignmentStatusSchema,
   CalendarEventSchema,
   CanvasConnectionSchema,
-  GoogleConnectionSchema,
   TaskSchema,
   TaskStatusSchema,
   UserSchema,
@@ -25,7 +24,6 @@ import type {
 
 export type User = z.infer<typeof UserSchema>;
 export type CanvasConnection = z.infer<typeof CanvasConnectionSchema>;
-export type GoogleConnection = z.infer<typeof GoogleConnectionSchema>;
 export type WhatsappConnection = z.infer<typeof WhatsappConnectionSchema>;
 export type Assignment = z.infer<typeof AssignmentSchema>;
 export type AssignmentStatus = z.infer<typeof AssignmentStatusSchema>;

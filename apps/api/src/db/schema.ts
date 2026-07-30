@@ -27,16 +27,6 @@ export const canvasConnections = pgTable("canvas_connections", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const googleConnections = pgTable("google_connections", {
-  id: text("id").primaryKey(),
-  userId: text("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  accessToken: text("access_token").notNull(),
-  refreshToken: text("refresh_token"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
 export const whatsappConnections = pgTable("whatsapp_connections", {
   id: text("id").primaryKey(),
   userId: text("user_id")
@@ -64,14 +54,20 @@ export const assignments = pgTable("assignments", {
 
 export const tasks = pgTable("tasks", {
   id: text("id").primaryKey(),
-  assignmentId: text("assignment_id")
+  userId: text("user_id")
     .notNull()
-    .references(() => assignments.id, { onDelete: "cascade" }),
+    .references(() => users.id, { onDelete: "cascade" }),
+  // Nullable: most tasks today come from a chat-driven breakdown with no persisted `assignments`
+  // row behind it (Canvas assignments are never synced into that table — see CLAUDE.md). Kept for
+  // the one existing caller (`generateAndPersist`, `POST /planner/generate`) that does have one.
+  assignmentId: text("assignment_id").references(() => assignments.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
+  description: text("description"),
   estimatedMinutes: integer("estimated_minutes").notNull(),
+  googleEventId: text("google_event_id"),
   scheduledStart: timestamp("scheduled_start", { withTimezone: true }),
   scheduledEnd: timestamp("scheduled_end", { withTimezone: true }),
-  status: text("status", { enum: ["pending", "scheduled", "completed"] })
+  status: text("status", { enum: ["pending", "scheduled", "completed", "skipped", "cancelled"] })
     .notNull()
     .default("pending"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -129,4 +125,5 @@ export const verifications = pgTable("verifications", {
   value: text("value").notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

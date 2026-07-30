@@ -132,6 +132,8 @@ export class RealWhatsappClient implements WhatsappClient {
       }
 
       const body = message.text.body;
+      console.log(`[whatsapp] received message from ${message.from}: ${JSON.stringify(body)}`);
+
       enqueue(message.from, async () => {
         if (message.id) {
           sendReadReceiptAndTyping(message.id).catch((err: unknown) => {
@@ -148,7 +150,9 @@ export class RealWhatsappClient implements WhatsappClient {
 
         let reply: string;
         try {
+          console.log(`[whatsapp] calling assistant for ${message.from} (user ${userId})`);
           reply = await chat(userId, body);
+          console.log(`[whatsapp] assistant replied to ${message.from}: ${JSON.stringify(reply)}`);
         } catch (err) {
           console.error(`[whatsapp] chat() failed for ${message.from} (user ${userId}):`, err);
           reply = CHAT_FAILURE_REPLY;

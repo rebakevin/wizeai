@@ -1,7 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
-import { db } from "../db/client";
-import { googleConnections } from "../db/schema";
 import type {
   CalendarClient,
   CalendarEventInput,
@@ -36,29 +33,6 @@ function getUserEvents(userId: string): CalendarEventRecord[] {
 }
 
 export class MockCalendarClient implements CalendarClient {
-  async connect(userId: string, accessToken: string, refreshToken?: string): Promise<void> {
-    await db.insert(googleConnections).values({
-      id: randomUUID(),
-      userId,
-      accessToken,
-      refreshToken: refreshToken ?? null,
-    });
-  }
-
-  async disconnect(userId: string): Promise<void> {
-    await db.delete(googleConnections).where(eq(googleConnections.userId, userId));
-    eventsByUser.delete(userId);
-  }
-
-  async isConnected(userId: string): Promise<boolean> {
-    const [connection] = await db
-      .select({ id: googleConnections.id })
-      .from(googleConnections)
-      .where(eq(googleConnections.userId, userId))
-      .limit(1);
-    return connection !== undefined;
-  }
-
   async getEvents(
     userId: string,
     rangeStart: Date,

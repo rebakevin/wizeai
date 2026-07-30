@@ -27,6 +27,8 @@ async function postMessages(payload: unknown): Promise<Response> {
 }
 
 export async function sendText(to: string, body: string): Promise<{ messageId: string }> {
+  console.log(`[whatsapp] sending message to ${to}: ${JSON.stringify(body)}`);
+
   const res = await postMessages({
     messaging_product: "whatsapp",
     to,
@@ -35,7 +37,9 @@ export async function sendText(to: string, body: string): Promise<{ messageId: s
   });
 
   const data = (await res.json()) as { messages?: { id: string }[] };
-  return { messageId: data.messages?.[0]?.id ?? "" };
+  const messageId = data.messages?.[0]?.id ?? "";
+  console.log(`[whatsapp] sent message to ${to} (id: ${messageId})`);
+  return { messageId };
 }
 
 export async function sendReadReceiptAndTyping(messageId: string): Promise<void> {
