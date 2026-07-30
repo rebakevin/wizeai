@@ -20,6 +20,7 @@ export const canvasConnections = pgTable("canvas_connections", {
   id: text("id").primaryKey(),
   userId: text("user_id")
     .notNull()
+    .unique()
     .references(() => users.id, { onDelete: "cascade" }),
   canvasBaseUrl: text("canvas_base_url").notNull(),
   accessToken: text("access_token").notNull(),
@@ -40,8 +41,9 @@ export const whatsappConnections = pgTable("whatsapp_connections", {
   id: text("id").primaryKey(),
   userId: text("user_id")
     .notNull()
+    .unique()
     .references(() => users.id, { onDelete: "cascade" }),
-  phoneNumber: text("phone_number").notNull(),
+  phoneNumber: text("phone_number").notNull().unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
