@@ -67,7 +67,10 @@ whatsappRouter.get("/webhook", (req, res) => {
 });
 
 whatsappRouter.post("/webhook", (req, res) => {
+  console.log("[whatsapp] POST /webhook received:", JSON.stringify(req.body));
+
   if (!isValidSignature(req)) {
+    console.warn("[whatsapp] webhook rejected: invalid signature");
     res.sendStatus(403);
     return;
   }

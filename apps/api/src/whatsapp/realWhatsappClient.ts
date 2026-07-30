@@ -4,8 +4,14 @@ import { z } from "zod";
 import { db } from "../db/client";
 import { whatsappConnections } from "../db/schema";
 import { chat } from "../assistant/assistantService";
-import { sendText } from "./graphClient";
+import { sendReadReceiptAndTyping, sendText } from "./graphClient";
+import { chunkForWhatsapp } from "./messageFormat";
+import { enqueue, markSeen } from "./inboundQueue";
 import type { WhatsappClient } from "./whatsappClient";
+
+const STALE_MESSAGE_MS = 5 * 60 * 1000;
+const NON_TEXT_REPLY = "I can only read text messages right now — mind typing it out?";
+const CHAT_FAILURE_REPLY = "Sorry — something went wrong on my end. Mind sending that again?";
 
 const WebhookPayloadSchema = z.object({
   entry: z
@@ -20,7 +26,24 @@ const WebhookPayloadSchema = z.object({
                     z.object({
                       from: z.string(),
                       type: z.string(),
+                      id: z.string().optional(),
+                      timestamp: z.string().optional(),
                       text: z.object({ body: z.string() }).optional(),
+                    }),
+                  )
+                  .optional(),
+                statuses: z
+                  .array(
+                    z.object({
+                      status: z.string(),
+                      errors: z
+                        .array(
+                          z.object({
+                            title: z.string().optional(),
+                            message: z.string().optional(),
+                          }),
+                        )
+                        .optional(),
                     }),
                   )
                   .optional(),
@@ -57,21 +80,65 @@ export class RealWhatsappClient implements WhatsappClient {
       return;
     }
 
-    const messages = (parsed.data.entry ?? []).flatMap((entry) =>
-      (entry.changes ?? []).flatMap((change) => change.value.messages ?? []),
+    const changes = (parsed.data.entry ?? []).flatMap((entry) => entry.changes ?? []);
+    const messages = changes.flatMap((change) => change.value.messages ?? []);
+    const statuses = changes.flatMap((change) => change.value.statuses ?? []);
+
+    console.log(
+      `[whatsapp] inbound: ${messages.length} message(s), ${statuses.length} status(es)`,
     );
 
+    for (const status of statuses) {
+      if (status.status === "failed") {
+        console.error("[whatsapp] delivery failed:", JSON.stringify(status.errors));
+      }
+    }
+
     for (const message of messages) {
-      if (message.type !== "text" || !message.text) {
+      if (message.id && !markSeen(message.id)) {
+        console.log(`[whatsapp] skipping duplicate delivery of ${message.id}`);
         continue;
       }
 
-      try {
-        const reply = await chat(message.from, message.text.body);
-        await this.sendMessage(message.from, reply);
-      } catch (err) {
-        console.error(`[whatsapp] failed to handle message from ${message.from}:`, err);
+      if (message.timestamp) {
+        const ageMs = Date.now() - Number(message.timestamp) * 1000;
+        if (ageMs > STALE_MESSAGE_MS) {
+          console.log(`[whatsapp] skipping stale message from ${message.from} (${ageMs}ms old)`);
+          continue;
+        }
       }
+
+      if (message.type !== "text" || !message.text) {
+        enqueue(message.from, async () => {
+          await this.sendMessage(message.from, NON_TEXT_REPLY);
+        });
+        continue;
+      }
+
+      const body = message.text.body;
+      enqueue(message.from, async () => {
+        if (message.id) {
+          sendReadReceiptAndTyping(message.id).catch((err: unknown) => {
+            console.warn(`[whatsapp] failed to send read receipt/typing indicator:`, err);
+          });
+        }
+
+        let reply: string;
+        try {
+          reply = await chat(message.from, body);
+        } catch (err) {
+          console.error(`[whatsapp] chat() failed for ${message.from}:`, err);
+          reply = CHAT_FAILURE_REPLY;
+        }
+
+        try {
+          for (const chunk of chunkForWhatsapp(reply)) {
+            await this.sendMessage(message.from, chunk);
+          }
+        } catch (err) {
+          console.error(`[whatsapp] failed to send reply to ${message.from}:`, err);
+        }
+      });
     }
   }
 
