@@ -41,9 +41,10 @@ bun run --cwd apps/api db:migrate       # drizzle-kit migrate (apply migrations)
 bun run --cwd apps/web build            # tsc -b && vite build
 ```
 
-There is no test suite yet. Type-checking is per-app (`tsc -b` for apps/web's project
-references, `tsc --noEmit -p tsconfig.json` for apps/api and packages/shared) — there's no
-single root-level typecheck command.
+There is no broad test suite — the one exception is `apps/api/src/whatsapp/messageFormat.test.ts`
+(`bun test`), covering the WhatsApp message-chunking edge cases. Type-checking is per-app
+(`tsc -b` for apps/web's project references, `tsc --noEmit -p tsconfig.json` for apps/api and
+packages/shared) — there's no single root-level typecheck command.
 
 Postgres and both dev servers do **not** survive a machine/Docker restart — if `bun run dev:api`
 fails with a Postgres connection error, run `docker compose up -d` first.
@@ -58,7 +59,7 @@ where they come from). Optional: `WEB_ORIGIN` (defaults to `http://localhost:517
 + Better Auth trusted origins), `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` (Google social login —
 social provider is only registered if `GOOGLE_CLIENT_ID` is set), `WHATSAPP_APP_SECRET` (enables
 webhook signature verification when set — skipped with a warning if empty), `WHATSAPP_API_VERSION`
-(defaults `v21.0`), `PORT` (defaults 3001).
+(defaults `v23.0` — needs v23+ for the typing-indicator call), `PORT` (defaults 3001).
 
 **The Gemini env var is `GEMINI_API_KEY`, not `GOOGLE_API_KEY`** — the installed `@google/adk`
 version reads `GEMINI_API_KEY` or `GOOGLE_GENAI_API_KEY` from `process.env` directly (bypassing
@@ -94,23 +95,50 @@ validates `process.env` with Zod at import time (fails fast on boot if a require
   user — they aren't wired to Better Auth sessions yet. WhatsApp's `/connect` route is the same
   (DB row, unused so far) but WhatsApp's actual chat flow (below) is real.
 - **WhatsApp** (`whatsapp/`): real integration via Meta's Cloud API.
-  `graphClient.ts.sendText()` POSTs to `graph.facebook.com/{WHATSAPP_API_VERSION}/{WHATSAPP_PHONE_NUMBER_ID}/messages`.
-  `realWhatsappClient.receiveWebhook()` parses Meta's `entry[].changes[].value.messages[]` shape
-  and, for each text message, calls `assistant/assistantService.chat()` using the sender's phone
-  number (`wa_id`) directly as the chat `userId` — no account lookup. `routes.ts`'s
-  `POST /webhook` **acks 200 immediately** and processes/replies asynchronously (Meta expects a
-  fast response; the agent call can take several seconds) and verifies `X-Hub-Signature-256`
-  against `WHATSAPP_APP_SECRET` when that env var is set (skipped with a one-time warning
-  otherwise) — signature verification needs the raw body, captured via `express.json()`'s
-  `verify` callback in `app.ts` (`req.rawBody`). `GET /webhook` is Meta's one-time verification
-  handshake, checked against `WHATSAPP_VERIFY_TOKEN`. `POST /send` is a dev-only route for testing
-  outbound sends without needing an inbound message first. WhatsApp is not reachable from Meta
-  without a public HTTPS tunnel to your local server (e.g. `ngrok http 3001`) — Meta cannot call
-  `localhost`.
+  `graphClient.ts.sendText()` POSTs to `graph.facebook.com/{WHATSAPP_API_VERSION}/{WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  `sendReadReceiptAndTyping()` marks the inbound message read and shows the typing indicator in
+  one call (auto-dismisses after 25s or when the reply sends). `realWhatsappClient.receiveWebhook()`
+  parses Meta's `entry[].changes[].value.messages[]`/`.statuses[]` shape (both all-optional —
+  a parse failure must never mean silence) and logs an unconditional `[whatsapp] inbound: N
+  message(s), M status(es)` line so a missing reply is diagnosable as "never arrived" vs. "arrived
+  but failed downstream." Each message is deduped by `id` (`inboundQueue.ts`'s bounded `markSeen`
+  set, checked synchronously before any `await` — Meta redelivers on retry) and dropped if its
+  `timestamp` is more than 5 minutes old (handles retry bursts after an ngrok reconnect).
+  Non-text messages (voice notes, images, etc.) get a "text only" reply instead of being silently
+  dropped. Text messages are handed to `inboundQueue.ts`'s `enqueue(from, ...)`, which chains
+  promises per sender so two fast messages from the same student can't race the same ADK session,
+  while different senders still run in parallel. Inside the queued job: `sendReadReceiptAndTyping`
+  fires without being awaited (courtesy, not a dependency), then `chat()` and the chunked send are
+  wrapped in **separate** try/catch blocks — a `chat()` failure gets a user-facing fallback reply
+  ("something went wrong, mind sending that again?") instead of silence, and a send failure is
+  distinguishable in logs from a chat failure. Replies over WhatsApp's 4096-char limit are split
+  by `messageFormat.ts`'s `chunkForWhatsapp()` (paragraph → line → sentence → space → hard-cut
+  boundary, sent sequentially so ordering is preserved) — sending over-length text otherwise gets
+  a Graph 400 and the student gets nothing. `sendMessage(to, text)` calls the sender's phone
+  number (`wa_id`) directly as the chat `userId` — no account lookup. `routes.ts`'s `POST /webhook`
+  **acks 200 immediately** and processes/replies asynchronously (Meta expects a fast response; the
+  agent call can take several seconds) and verifies `X-Hub-Signature-256` against
+  `WHATSAPP_APP_SECRET` when that env var is set (skipped with a one-time warning otherwise) —
+  signature verification needs the raw body, captured via `express.json()`'s `verify` callback in
+  `app.ts` (`req.rawBody`). `GET /webhook` is Meta's one-time verification handshake, checked
+  against `WHATSAPP_VERIFY_TOKEN`. `POST /send` is a dev-only route for testing outbound sends
+  without needing an inbound message first. WhatsApp is not reachable from Meta without a public
+  HTTPS tunnel to your local server (e.g. `ngrok http 3001`) — Meta cannot call `localhost`.
+  Beyond the tunnel, your app also needs to be **subscribed to the WABA**
+  (`POST /{WABA_ID}/subscribed_apps`) — setting the callback URL in the App Dashboard configures
+  it at the *app* level but does not itself subscribe the app to any specific WhatsApp Business
+  Account; delivery silently no-ops without this even though the dashboard's own "check test
+  webhooks" panel (which logs Meta-side events, not confirmed deliveries) can make it look fine.
+  **Run the API with `bun run --cwd apps/api start` (no `--watch`) while testing WhatsApp
+  conversations** — `dev:api`'s file-watch restarts on every save, which wipes the in-memory ADK
+  session (see below) mid-conversation; keep using `dev:api` for everything else.
 - **Assistant** (`assistant/`): the general-purpose conversational agent — `POST /api/agent/chat`
-  and the WhatsApp flow above both go through `assistantService.chat(userId, message)`. Unlike
-  the Planner, this agent has `tools` (`tools.ts`, built with ADK's `FunctionTool` + Zod
-  `parameters`, not Gemini's `Schema`/`Type`) and a **persistent** per-`userId` session
+  and the WhatsApp flow above both go through `assistantService.chat(userId, message)`. Currently
+  **chat-only by design** (`agent.ts`'s `ENABLE_TOOLS = false`) so a WhatsApp conversation can't
+  have a tool fire mid-chat while that flow is still being verified — flip that one constant (and
+  its paired instruction text) to restore the three tools below. Unlike the Planner, this agent
+  has `tools` (`tools.ts`, built with ADK's `FunctionTool` + Zod `parameters`, not Gemini's
+  `Schema`/`Type`, currently dormant per `ENABLE_TOOLS`) and a **persistent** per-`userId` session
   (`InMemorySessionService.getOrCreateSession` + `Runner.runAsync`, not `runEphemeral`) so it
   remembers earlier turns (e.g. "why did you split it up that way?"). Tools read/write
   conversation state via `toolContext.state.get/set` — e.g. `breakdown_assignment` stores the
