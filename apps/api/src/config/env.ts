@@ -20,7 +20,7 @@ const EnvSchema = z.object({
   WHATSAPP_PHONE_NUMBER_ID: z.string().min(1),
   WHATSAPP_VERIFY_TOKEN: z.string().min(1),
   WHATSAPP_APP_SECRET: z.string().default(""),
-  WHATSAPP_API_VERSION: z.string().default("v21.0"),
+  WHATSAPP_API_VERSION: z.string().default("v23.0"),
 });
 
 export const env = EnvSchema.parse(process.env);
