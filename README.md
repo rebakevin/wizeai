@@ -27,28 +27,28 @@ Encourage students to use AI to build responsible learning habits instead of dev
 <details>
 <summary>Test number & credentials</summary>
 
-![img.png](img.png)
+![img.png](assets/img.png)
 
 </details>
 
 <details>
 <summary>Sending a test message</summary>
 
-![img_4.png](img_4.png)
+![img_4.png](assets/img_4.png)
 
 </details>
 
 <details>
 <summary>Webhook callback URL</summary>
 
-![img_2.png](img_2.png)
+![img_2.png](assets/img_2.png)
 
 </details>
 
 <details>
 <summary>Webhook field subscription</summary>
 
-![img_3.png](img_3.png)
+![img_3.png](assets/img_3.png)
 
 </details>
 
