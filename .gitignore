@@ -17,5 +17,5 @@ build/
 .DS_Store
 
 # Local-only docs
-docs/
+docs/PLANS/
 CLAUDE.md
